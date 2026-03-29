@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Verify OTP</title>
+</head>
+
+<body style="background:#0f172a; color:white; text-align:center; margin-top:100px;">
+
+<h2>Enter OTP</h2>
+
+<input id="otp" placeholder="Enter Code"><br><br>
+<button onclick="verifyOTP()">Verify</button>
+
+<script>
+async function verifyOTP() {
+
+  console.log("clicked");
+
+  const otp = document.getElementById("otp").value;
+  const email = localStorage.getItem("email");
+
+  console.log("EMAIL:", email);
+  console.log("OTP:", otp);
+
+  try {
+    const res = await fetch("http://localhost:3000/verify", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ email, otp })
+    });
+
+    const text = await res.text();
+
+    try {
+      const data = JSON.parse(text);
+
+      alert(data.message);
+
+      if (data.message === "Login successful") {
+        window.location.href = "dashboard.html";
+      }
+
+    } catch (e) {
+      console.log("NOT JSON RESPONSE:", text);
+      alert("Server error ❌");
+    }
+
+  } catch (err) {
+    console.log("FETCH ERROR:", err);
+    alert("Connection failed ❌");
+  }
+}
+</script>
+
+</body>
+</html>

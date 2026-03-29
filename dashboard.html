@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Security Dashboard</title>
+
+  <!-- Leaflet Map -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial;
+      background: #0f172a;
+      color: white;
+    }
+
+    h1 {
+      text-align: center;
+      margin-top: 20px;
+    }
+
+    #stats {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      margin: 20px;
+    }
+
+    .card {
+      background: #1e293b;
+      padding: 15px 25px;
+      border-radius: 10px;
+      text-align: center;
+      min-width: 150px;
+    }
+
+    #map {
+      height: 350px;
+      margin: 20px;
+      border-radius: 10px;
+    }
+
+    table {
+      width: 90%;
+      margin: auto;
+      border-collapse: collapse;
+      background: #1e293b;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    th, td {
+      padding: 10px;
+      text-align: center;
+    }
+
+    th {
+      background: #334155;
+    }
+
+    tr:nth-child(even) {
+      background: #0f172a;
+    }
+
+    button {
+      margin: 20px;
+      padding: 10px 20px;
+      border: none;
+      background: #ef4444;
+      color: white;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+
+<body>
+
+<h1>🛡 Security Dashboard</h1>
+
+<div id="stats">
+  <div class="card">
+    <h3 id="total">0</h3>
+    <p>Total Logs</p>
+  </div>
+
+  <div class="card">
+    <h3 id="success">0</h3>
+    <p>Success</p>
+  </div>
+
+  <div class="card">
+    <h3 id="failed">0</h3>
+    <p>Failed</p>
+  </div>
+</div>
+
+<div id="map"></div>
+
+<center>
+  <button onclick="loadLogs()">Refresh</button>
+</center>
+
+<table>
+  <thead>
+    <tr>
+      <th>Type</th>
+      <th>Email</th>
+      <th>Message</th>
+      <th>Time</th>
+    </tr>
+  </thead>
+  <tbody id="logsTable"></tbody>
+</table>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script>
+let map = L.map('map').setView([20, 0], 2);
+
+// 🧠 نخزن الماركرات حتى نحذفها عند التحديث
+let markers = [];
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 18,
+}).addTo(map);
+
+// 🔥 أيقونات مخصصة
+const redIcon = new L.Icon({
+  iconUrl: "https://maps.google.com/mapfiles/ms/icons/red-dot.png",
+  iconSize: [32, 32]
+});
+
+const greenIcon = new L.Icon({
+  iconUrl: "https://maps.google.com/mapfiles/ms/icons/green-dot.png",
+  iconSize: [32, 32]
+});
+
+const blueIcon = new L.Icon({
+  iconUrl: "https://maps.google.com/mapfiles/ms/icons/blue-dot.png",
+  iconSize: [32, 32]
+});
+
+// تحميل البيانات
+async function loadLogs() {
+
+  // 🧹 تنظيف
+  document.getElementById("logsTable").innerHTML = "";
+  markers.forEach(m => map.removeLayer(m));
+  markers = [];
+
+  const res = await fetch("/check-logs");
+  const logs = await res.json();
+
+  let total = logs.length;
+  let success = 0;
+  let failed = 0;
+
+  let bounds = [];
+
+  logs.forEach(log => {
+
+    // 📊 stats
+    if (log.type.includes("SUCCESS")) success++;
+    if (log.type.includes("FAILED")) failed++;
+
+    // 📋 table
+    const row = `
+      <tr>
+        <td>${log.type}</td>
+        <td>${log.email}</td>
+        <td>${log.message}</td>
+        <td>${log.time}</td>
+      </tr>
+    `;
+    document.getElementById("logsTable").innerHTML += row;
+
+    // 🗺 قراءة الموقع
+    if (log.message && log.message.includes("LAT")) {
+
+      const latMatch = log.message.match(/LAT: ([\d\.\-]+)/);
+      const lonMatch = log.message.match(/LON: ([\d\.\-]+)/);
+
+      if (latMatch && lonMatch) {
+
+        const lat = parseFloat(latMatch[1]);
+        const lon = parseFloat(lonMatch[1]);
+
+        // 🎯 تحديد اللون
+        let icon = redIcon;
+
+        if (log.type.includes("SUCCESS")) icon = greenIcon;
+        if (log.type.includes("FAILED")) icon = redIcon;
+        if (log.type.includes("ATTACK")) icon = redIcon;
+
+        const marker = L.marker([lat, lon], { icon })
+          .addTo(map)
+          .bindPopup(`
+            <b>${log.type}</b><br>
+            ${log.email}<br>
+            ${log.message}
+          `);
+
+        markers.push(marker);
+        bounds.push([lat, lon]);
+      }
+    }
+  });
+
+  // 🎯 تكبير الخريطة على النقاط
+  if (bounds.length > 0) {
+    map.fitBounds(bounds);
+  }
+
+  // 📍 موقعك الحقيقي
+  navigator.geolocation.getCurrentPosition(pos => {
+    const userMarker = L.marker(
+      [pos.coords.latitude, pos.coords.longitude],
+      { icon: blueIcon }
+    )
+    .addTo(map)
+    .bindPopup("YOU 📍")
+    .openPopup();
+
+    markers.push(userMarker);
+  });
+
+  // تحديث stats
+  document.getElementById("total").innerText = total;
+  document.getElementById("success").innerText = success;
+  document.getElementById("failed").innerText = failed;
+}
+
+// تشغيل تلقائي
+loadLogs();
+</script>
+
+</body>
+</html>
